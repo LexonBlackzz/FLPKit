@@ -461,7 +461,7 @@ chained from FL 8 by `tools/fl8to4.py`.
 - 215 is 96 bytes in FL 4.5.2 saves (u32 at 92 = 1); older 4.x demos 92. 153 = sample rate on audio clip
   channels (before 143).
 
-## Downgrade FL 12.3 → FL 8.0 (prototype: `tools/fl12to8.py`, after `flpkit downgrade --to 12.3`)
+## Downgrade FL 12.3 → FL 8.0 (`src/fl8.rs`, `src/sytrus.rs`, `flpkit downgrade --to 8.0`)
 
 From newstuff / SolidInc saved by FL 8.0 and FL 12.3, checked on Scott Fisher - Moholithic Filter (FL 2026 export →
 12.3 → 8.0: same 9476 notes in our MIDI export as the 2026 file; Sytrus byte-equal to FL 8's own copy of the demo).
@@ -488,7 +488,7 @@ sample paths, MIDI Out/Limiter states.
 - Legacy effects: FL 12's kind-8 Fruity Wrapper chunk floats are FL 8's native state (201 = the effect name, 212 byte
   8 = 0). Checked against FL 8's Moholithic: Compressor param 5 is int / 7, Delay param 4 (int − 1) / 15 (fixed in
   `LEGACY_VSTS`).
-- Sytrus v23 → v18 (`tools/sy23to18.py`, SolidInc's 2 patches): drop byte 977; text [varint n][UTF-16] → [u32 len]
+- Sytrus v23 → v18 (`src/sytrus.rs`, SolidInc's 2 patches): drop byte 977; text [varint n][UTF-16] → [u32 len]
   [RTF]; curves version 3 → 2 with the point mode's top byte cleared; version bytes 3 → 2 at op + 2128, 36-byte
   sections at 20, 37 at 21, 76 at 60; 40-byte sections lose their last 4.
 - Fruity slicer v16 → v15: v15 = header, path, slices, 13-byte trailer, u32 0 (v16 appends per-slice articulator
@@ -571,7 +571,7 @@ rules below both convert to FL 11's own saves except edited content and runtime 
 - 212 bytes 36..51 = window x, y, w, h. FL 11..20 save w = h = 0 for never-resized windows (plugin default);
   the 20.9 step zeroes w/h for every target so newer / replaced plugins don't open tiled (Delay 3's 747 x 217
   made FL 11's Delay 2 tile). FL 8 never saves 0 but reads it fine (user-tested in FL 8 and FL 11), so
-  fl12to8 writes 0 too; FL 8 sizes made FL 11 open e.g. 7 Band EQ at FL 8's narrow 94 x 321.
+  the FL 8 step writes 0 too; FL 8 sizes made FL 11 open e.g. 7 Band EQ at FL 8's narrow 94 x 321.
 - Per-clip fade automation clips are placed 1 tick longer than the clip (unless the same channel's next fade
   clip starts there): FL doesn't apply a point on a clip's last tick, so the back-to-full-volume step never
   happened and Avicii's Progressive Kick stayed at 0 after bar 65.

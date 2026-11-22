@@ -424,3 +424,18 @@ fn fl11_matches_fl11_save() {
         assert!(MAY_DIFFER.contains(&x.id) || x.data == y.data, "event {} differs", x.id);
     }
 }
+
+/// FL 12.3 -> 8.0: Moholithic (FL 2026 export) keeps its step-sequencer kick as FL 8 step events (91), every
+/// event FL 8 lacks is gone, and FL 8's tempo pair (93 fine + 66 BPM) replaces 156.
+#[test]
+fn fl8_steps_and_tempo() {
+    let Ok(b) = std::fs::read("samples/ScottFisher-Moholithic Filter(FL2026Export).flp") else { return };
+    let (d12, _) = flparser::downgrade::downgrade(&b, "12.3.0.72", true).unwrap();
+    let dir = std::env::temp_dir().join("flpkit-fl8-test samples");
+    let (d8, _) = flparser::fl8::from_12_3(&d12, &dir).unwrap();
+    let (_, ev) = flparser::parse(&d8).unwrap();
+    assert!(ev.iter().any(|e| e.id == 91), "no step events");
+    assert!(ev.iter().any(|e| e.id == 66) && !ev.iter().any(|e| e.id == 156));
+    assert!(!ev.iter().any(|e| [28, 29, 31, 32, 97, 98, 202, 237, 238, 239].contains(&e.id)));
+    assert_eq!(flparser::text(ev.iter().find(|e| e.id == 199).unwrap().data), "8.0.0");
+}

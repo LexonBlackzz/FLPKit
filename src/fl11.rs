@@ -4,7 +4,7 @@
 //! 8 effect slots, steps as 91 events and FL 8's mixer track layout.
 use std::collections::{HashMap, HashSet};
 
-type Ev = Vec<(u8, Vec<u8>)>;
+pub(crate) type Ev = Vec<(u8, Vec<u8>)>;
 
 const DROP: [u8; 3] = [32, 97, 98]; // FL 12 only
 /// UTF-16 in FL 12, 8-bit in FL 11
@@ -12,19 +12,19 @@ const TEXT: [u8; 16] = [193, 194, 195, 196, 197, 200, 201, 202, 203, 204, 206, 2
 /// no FL 11 counterpart (Wave Candy v9: no rule)
 const MISSING: [&str; 2] = ["Transient Processor", "Wave Candy"];
 
-fn u16_at(d: &[u8], o: usize) -> u16 {
+pub(crate) fn u16_at(d: &[u8], o: usize) -> u16 {
     u16::from_le_bytes([d[o], d[o + 1]])
 }
-fn u32_at(d: &[u8], o: usize) -> u32 {
+pub(crate) fn u32_at(d: &[u8], o: usize) -> u32 {
     u32::from_le_bytes(d[o..o + 4].try_into().unwrap())
 }
-fn i32_at(d: &[u8], o: usize) -> i32 {
+pub(crate) fn i32_at(d: &[u8], o: usize) -> i32 {
     u32_at(d, o) as i32
 }
-fn put_u32(d: &mut [u8], o: usize, v: u32) {
+pub(crate) fn put_u32(d: &mut [u8], o: usize, v: u32) {
     d[o..o + 4].copy_from_slice(&v.to_le_bytes());
 }
-fn trim0(d: &[u8]) -> &[u8] {
+pub(crate) fn trim0(d: &[u8]) -> &[u8] {
     let n = d.iter().rposition(|&b| b != 0).map_or(0, |i| i + 1);
     &d[..n]
 }
@@ -39,7 +39,7 @@ struct Ctx {
 }
 
 /// UTF-16 text -> 8-bit (characters past U+00FF become '?'), zero-terminated
-fn text(d: &[u8]) -> Vec<u8> {
+pub(crate) fn text(d: &[u8]) -> Vec<u8> {
     let u: Vec<u16> = d.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
     let s = String::from_utf16_lossy(&u);
     let mut out: Vec<u8> = s.trim_end_matches('\0').chars().map(|c| if (c as u32) < 256 { c as u8 } else { b'?' }).collect();
@@ -289,7 +289,7 @@ fn channels(ev: Ev) -> Ev {
 }
 
 /// `[u32 id][u64 size][data]` records after a 4-byte kind; a repeated id replaces the earlier one in place
-fn records(b: &[u8]) -> Vec<(u32, Vec<u8>)> {
+pub(crate) fn records(b: &[u8]) -> Vec<(u32, Vec<u8>)> {
     let (mut o, mut r): (usize, Vec<(u32, Vec<u8>)>) = (4, Vec::new());
     while o + 12 <= b.len() {
         let t = u32_at(b, o);
@@ -396,9 +396,11 @@ fn plugins(ev: &mut Ev, warnings: &mut Vec<String>) {
     }
 }
 
-/// FL 12+ saves step-sequencer steps as length-0 notes (224); FL 11 keeps them as 91 [step][1] after the channel's
-/// block, under a 65 (pattern), with 72 [step][velocity] before each off-default (not 100) velocity
-fn steps(ev: Ev, ppq: u32) -> Ev {
+/// FL 12+ saves step-sequencer steps as length-0 notes (224); FL 8 / 11 keep them as 91 [step][1] after the
+/// channel's block, under a 65 (pattern) (FL 8's Moholithic: 65 1, 91 00 01 / 04 01 / 08 01 / 0c 01 after the kick).
+/// `size`: note record size; `vel`: its velocity offset, for FL 11's 72 [step][velocity] before each off-default
+/// (not 100) velocity
+pub(crate) fn steps(ev: Ev, ppq: u32, size: usize, vel: Option<usize>) -> Ev {
     let q = ppq / 4;
     let mut per: Vec<(u16, Vec<(u16, Vec<(u8, u8)>)>)> = Vec::new();
     let (mut out, mut pat): (Ev, Option<u16>) = (Vec::new(), None);
@@ -408,7 +410,7 @@ fn steps(ev: Ev, ppq: u32) -> Ev {
         }
         if let (224, Some(p)) = (i, pat) {
             let mut keep = Vec::new();
-            for r in d.chunks(24) {
+            for r in d.chunks(size) {
                 let (pos, ch, ln) = (u32_at(r, 0), u16_at(r, 6), u32_at(r, 8));
                 if ln == 0 && pos % q == 0 && pos / q < 256 {
                     let c = match per.iter().position(|e| e.0 == ch) {
@@ -426,7 +428,7 @@ fn steps(ev: Ev, ppq: u32) -> Ev {
                             pats.len() - 1
                         }
                     };
-                    pats[pi].1.push(((pos / q) as u8, r[21]));
+                    pats[pi].1.push(((pos / q) as u8, vel.map_or(100, |v| r[v])));
                 } else {
                     keep.extend(r);
                 }
@@ -543,7 +545,7 @@ pub fn from_12_3(b: &[u8]) -> Result<(Vec<u8>, Vec<String>), String> {
     }
     let mut out = c.mixer(channels(out));
     plugins(&mut out, &mut c.warnings);
-    let mut out = steps(out, h.ppq as u32);
+    let mut out = steps(out, h.ppq as u32, 24, Some(21));
     pitch(&mut out);
     Ok((crate::write(h, &out), c.warnings))
 }
