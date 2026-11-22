@@ -461,27 +461,29 @@ pub(crate) fn from_8(ev: Ev, ctx: &mut Ctx, fl6: bool) -> Ev {
     }
 }
 
-/// Converts an FL 8.0 project to FL `to` ("7.0.0", "6.0.4", "5.0.0" or "4.5.2"). Samples the target lacks are copied
+/// Converts an FL 8.0 project to FL `to` ("7.0.0", "6.0.4", "5.0.0", "4.5.2" or "3.5.4"). Samples the target lacks are copied
 /// into `outdir`.
 pub fn from_8_0(b: &[u8], to: &str, outdir: &Path) -> Result<(Vec<u8>, Vec<String>), String> {
     let (h, events) = crate::parse(b)?;
     let ev: Ev = events.iter().map(|e| (e.id, e.data.to_vec())).collect();
     let il = image_line();
-    let pf = std::env::var("FLPKIT_PF").unwrap_or_else(|_| r"C:\Program Files (x86)".into());
     let data = match to {
         "7.0.0" => il.join(r"FL Studio 7\Data"),
         "6.0.4" => il.join(r"FL Studio 6\Data"),
         "5.0.0" => il.join(r"FLStudio5\Data"),
-        "4.5.2" => Path::new(&pf).join(r"FLStudio4\Data"),
+        "4.5.2" | "3.5.4" => crate::fl8::program_files().join(r"FLStudio4\Data"),
         _ => return Err(format!("no FL 8 step to {to}")),
     };
     let mut ctx = Ctx { data, outdir: outdir.into(), tempo: 140.0, warnings: Vec::new() };
     let mut ev = from_8(ev, &mut ctx, to != "7.0.0");
-    if to == "5.0.0" || to == "4.5.2" {
+    if ["5.0.0", "4.5.2", "3.5.4"].contains(&to) {
         ev = crate::fl5::from_6(ev, &mut ctx.warnings);
     }
-    if to == "4.5.2" {
+    if to == "4.5.2" || to == "3.5.4" {
         ev = crate::fl4::from_5(ev, &mut ctx.warnings);
+    }
+    if to == "3.5.4" {
+        ev = crate::fl3::from_4(ev, h.ppq as u32, outdir, &mut ctx.warnings);
     }
     Ok((crate::write(h, &ev), ctx.warnings))
 }

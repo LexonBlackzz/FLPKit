@@ -505,7 +505,7 @@ sample paths, MIDI Out/Limiter states.
 - Love Philter → Free Filter links: Filter 1 cutoff (param 9) → Free Filter freq (param 1), the source clip's
   values mapped through the same cutoff calibration; links to other Love Philter params are dropped.
 
-## Downgrade FL 4.x → FruityLoops 3.5.4 (prototype: `tools/fl4to3.py`)
+## Downgrade FL 4.x → FruityLoops 3.5.4 (`src/fl3.rs`)
 
 From the demos both ship (Saw, Clouds, LogDrumThing, BeepMap Ambi as 4.1.2 / 3.5.4; Hoovalicious, SubwooferTest,
 NewStuff). Converting the FL 4 saves of Saw/Clouds/BeepMap reproduces FL 3.5's event sequence; left: effect order,

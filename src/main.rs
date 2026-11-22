@@ -1,9 +1,9 @@
 //! flpkit midi <in.flp> [-o out.mid] [--cut] [--zero-vel]
 //!     --cut: FL's "Cut remainder" export option; --zero-vel: velocity-0 notes as velocity 1
 //! flpkit downgrade <in.flp> --to <version> [--force] [-o out.flp]
-//!     version: 20.9, 20.6, 12.3, 11.1, 8.0, 7.0, 6.0, 5.0, 4.5 or a full 20.x / 12.3 version string (e.g. 20.6.2.1549)
+//!     version: 20.9, 20.6, 12.3, 11.1, 8.0, 7.0, 6.0, 5.0, 4.5, 3.5 or a full 20.x / 12.3 version string (e.g. 20.6.2.1549)
 const USAGE: &str = "usage: flpkit midi <in.flp> [-o out.mid] [--cut] [--zero-vel]
-       flpkit downgrade <in.flp> --to <20.9|20.6|12.3|11.1|8.0|7.0|6.0|5.0|4.5|full version> [--force] [-o out.flp]";
+       flpkit downgrade <in.flp> --to <20.9|20.6|12.3|11.1|8.0|7.0|6.0|5.0|4.5|3.5|full version> [--force] [-o out.flp]";
 
 /// Short target names -> the version string written into the project (builds the rules were checked against)
 const TARGETS: &[(&str, &str)] = &[("20.9", "20.9.1.2826"), ("20.6", "20.6.2.1549"), ("12.3", "12.3.0.72")];
@@ -34,6 +34,7 @@ fn main() {
                 "6.0" | "6" => Some("6.0.4"),
                 "5.0" | "5" => Some("5.0.0"),
                 "4.5" | "4.5.2" | "4" => Some("4.5.2"),
+                "3.5" | "3.5.4" | "3" => Some("3.5.4"),
                 _ => None,
             };
             let v = if old.is_some() { "12.3.0.72" } else { TARGETS.iter().find(|t| t.0 == to).map_or(to.as_str(), |t| t.1) };
@@ -43,8 +44,10 @@ fn main() {
             let samples = std::path::PathBuf::from(format!("{} samples", out.trim_end_matches(".flp")));
             // an FL 12.3 save skips the 12.3 step, an FL 8 save the FL 8 one too
             let src = flparser::parse(&bytes).ok().and_then(|(_, ev)| ev.iter().find(|e| e.id == 199).map(|e| flparser::version(&flparser::text(e.data))));
-            let below8 = matches!(old, Some("7.0.0" | "6.0.4" | "5.0.0" | "4.5.2"));
-            let from8 = below8 && src.is_some_and(|s| s[0] == 8);
+            let below8 = matches!(old, Some("7.0.0" | "6.0.4" | "5.0.0" | "4.5.2" | "3.5.4"));
+            // an FL 4 save goes straight to the FruityLoops 3.5 step
+            let from4 = old == Some("3.5.4") && src.is_some_and(|s| s[0] == 4);
+            let from8 = below8 && src.is_some_and(|s| s[0] == 8 || from4);
             let (mut d, mut w) = if from8 || (old.is_some() && src.is_some_and(|s| s[..2] == [12, 3])) {
                 (bytes.clone(), Vec::new())
             } else {
@@ -58,7 +61,10 @@ fn main() {
                         let s = samples.clone();
                         steps.push(Box::new(move |d| flparser::fl8::from_12_3(d, &s)));
                     }
-                    if below8 {
+                    if from4 {
+                        let s = samples.clone();
+                        steps.push(Box::new(move |d| flparser::fl3::from_4_x(d, &s)));
+                    } else if below8 {
                         let s = samples.clone();
                         steps.push(Box::new(move |d| flparser::fl6::from_8_0(d, o, &s)));
                     }

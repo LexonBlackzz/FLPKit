@@ -25,8 +25,10 @@ const NEWER: [&str; 6] = ["Fruity Love Philter", "Slicex", "Maximus", "Fruity Pa
 
 /// Install folders: FLPKIT_PF (default C:\Program Files (x86)), FLPKIT_IL (default its Image-Line folder)
 pub(crate) fn image_line() -> PathBuf {
-    let pf = std::env::var("FLPKIT_PF").unwrap_or_else(|_| r"C:\Program Files (x86)".into());
-    std::env::var("FLPKIT_IL").map(PathBuf::from).unwrap_or_else(|_| Path::new(&pf).join("Image-Line"))
+    std::env::var("FLPKIT_IL").map(PathBuf::from).unwrap_or_else(|_| program_files().join("Image-Line"))
+}
+pub(crate) fn program_files() -> PathBuf {
+    std::env::var("FLPKIT_PF").map_or_else(|_| r"C:\Program Files (x86)".into(), PathBuf::from)
 }
 
 /// The newest FL 2025 / 2026 install (FL 12+ sample paths are relative to its Data)

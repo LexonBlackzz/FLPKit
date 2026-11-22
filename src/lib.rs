@@ -140,6 +140,7 @@ pub fn write(h: Header, events: &[(u8, Vec<u8>)]) -> Vec<u8> {
 mod intro;
 pub mod downgrade;
 pub mod fl11;
+pub mod fl3;
 pub mod fl4;
 pub mod fl5;
 pub mod fl6;
