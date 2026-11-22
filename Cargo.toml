@@ -1,0 +1,16 @@
+[package]
+name = "flpkit"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "FL Studio project (.flp) tools: MIDI export and downgrading to older FL versions"
+
+[lib]
+name = "flparser"
+
+[[bin]]
+name = "flpkit"
+path = "src/main.rs"
+
+[dependencies]
+miniz_oxide = "0.8"

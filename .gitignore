@@ -1,0 +1,7 @@
+/target
+/out
+/samples
+*.flp
+*.mid
+*.wav
+__pycache__/
