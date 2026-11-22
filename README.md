@@ -31,12 +31,12 @@ flpkit midi song.flp -o out.mid --cut
 Back up your project first. Each step rewrites the file for the older version and drops or substitutes what that version lacks. The tool prints a warning for each loss.
 
 ```sh
-flpkit downgrade song.flp --to 20.6       # also 20.9, 12.3
+flpkit downgrade song.flp --to 20.6       # also 20.9, 12.3, 11.1
 ```
 
 `flpkit` refuses a project when the target can't load something in it, like a plugin newer than that version. `--force` converts it anyway.
 
-Targets older than FL 12.3 still run as Python scripts in `tools/`, chained after `flpkit`. To take an FL 2026 project to FL 8:
+Targets older than FL 11 still run as Python scripts in `tools/`, chained after `flpkit`. To take an FL 2026 project to FL 8:
 
 ```sh
 flpkit downgrade song.flp --to 12.3 --force -o song12.flp
@@ -49,7 +49,7 @@ The Python steps are moving into `flpkit` itself, so one command will cover ever
 |---|---|---|---|
 | FL 2025 / 2026 | FL 20.9, 20.6 | `flpkit downgrade --to 20.6` | Opened and played in FL 20.6 |
 | FL 2025 / 2026 | FL 12.3 | `flpkit downgrade --to 12.3` | Opened and played in FL 12.3 |
-| FL 12.3 | FL 11.1 | `tools/fl12to11.py` | An Avicii remake, sounds right in FL 11 (64-bit) |
+| FL 2025 / 2026 | FL 11.1 | `flpkit downgrade --to 11.1` | An Avicii remake, sounds right in FL 11 (64-bit) |
 | FL 12.3 | FL 8.0 | `tools/fl12to8.py` | Scott Fisher's Moholithic Filter in FL 8 |
 | FL 8.0 | FL 7.0 | `tools/fl8to7.py` | SolidInc's What I Found; the slicer sounds a bit different |
 | FL 8.0 | FL 6.0 | `tools/fl8to6.py` | What I Found loads in FL 6 |

@@ -406,3 +406,21 @@ fn progress_reports_reach_the_end() {
     assert_eq!(pieces.concat(), p.to_smf());
     assert!(w.0 == w.1 && w.2 > 0, "{w:?}");
 }
+
+/// FL 12.3 -> 11.1 against FL 11's own save of the same song: same event sequence, and every event equal
+/// except ids whose content FL changes on each save (window positions, project info, mixer state).
+#[test]
+fn fl11_matches_fl11_save() {
+    const MAY_DIFFER: &[u8] = &[133, 198, 212, 213, 225, 237];
+    let (Ok(b), Ok(real)) = (
+        std::fs::read("samples/newstuffFromFL8MIDI(FL12Export).flp"),
+        std::fs::read("samples/newstuffFromFL8MIDI(FL11Export).flp"),
+    ) else { return };
+    let (ours, _) = flparser::fl11::from_12_3(&b).unwrap();
+    let ((_, a), (_, e)) = (flparser::parse(&ours).unwrap(), flparser::parse(&real).unwrap());
+    let ids = |v: &[flparser::Event]| v.iter().map(|x| x.id).collect::<Vec<_>>();
+    assert_eq!(ids(&a), ids(&e));
+    for (x, y) in a.iter().zip(&e) {
+        assert!(MAY_DIFFER.contains(&x.id) || x.data == y.data, "event {} differs", x.id);
+    }
+}

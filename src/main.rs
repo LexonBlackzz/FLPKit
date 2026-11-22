@@ -1,9 +1,9 @@
 //! flpkit midi <in.flp> [-o out.mid] [--cut] [--zero-vel]
 //!     --cut: FL's "Cut remainder" export option; --zero-vel: velocity-0 notes as velocity 1
 //! flpkit downgrade <in.flp> --to <version> [--force] [-o out.flp]
-//!     version: 20.9, 20.6, 12.3 or a full version string (e.g. 20.6.2.1549)
+//!     version: 20.9, 20.6, 12.3, 11.1 or a full 20.x / 12.3 version string (e.g. 20.6.2.1549)
 const USAGE: &str = "usage: flpkit midi <in.flp> [-o out.mid] [--cut] [--zero-vel]
-       flpkit downgrade <in.flp> --to <20.9|20.6|12.3|full version> [--force] [-o out.flp]";
+       flpkit downgrade <in.flp> --to <20.9|20.6|12.3|11.1|full version> [--force] [-o out.flp]";
 
 /// Short target names -> the version string written into the project (builds the rules were checked against)
 const TARGETS: &[(&str, &str)] = &[("20.9", "20.9.1.2826"), ("20.6", "20.6.2.1549"), ("12.3", "12.3.0.72")];
@@ -26,8 +26,16 @@ fn main() {
         }
         "downgrade" => {
             let Some(to) = opt("--to") else { usage() };
-            let v = TARGETS.iter().find(|t| t.0 == to).map_or(to.as_str(), |t| t.1);
-            let (d, w) = flparser::downgrade::downgrade(&bytes, v, flag("--force")).unwrap_or_else(|e| fail(&format!("{input}: {e}")));
+            let fl11 = to == "11.1" || to == "11";
+            let v = if fl11 { "12.3.0.72" } else { TARGETS.iter().find(|t| t.0 == to).map_or(to.as_str(), |t| t.1) };
+            let (mut d, mut w) = flparser::downgrade::downgrade(&bytes, v, flag("--force")).unwrap_or_else(|e| fail(&format!("{input}: {e}")));
+            let v = if fl11 {
+                let (d11, w11) = flparser::fl11::from_12_3(&d).unwrap_or_else(|e| fail(&format!("{input}: {e}")));
+                (d, w) = (d11, [w, w11].concat());
+                "11.1.1"
+            } else {
+                v
+            };
             let stem = p.file_stem().unwrap().to_string_lossy();
             let out = opt("-o").unwrap_or_else(|| p.with_file_name(format!("{stem} (FL{to}).flp")).to_string_lossy().into());
             (d, w, format!("FL {v} project"), out)

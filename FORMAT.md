@@ -532,7 +532,7 @@ window junk (212), 217 values, 84 (0 or 8), playlist order within a bar.
   at `<stem>.wav` in the samples folder for a render made in FL 4.
 
 
-## Downgrade FL 12.3 → FL 11.1 (prototype: `tools/fl12to11.py`, after `flpkit downgrade --to 12.3`)
+## Downgrade FL 12.3 → FL 11.1 (`src/fl11.rs`, `flpkit downgrade --to 11.1`)
 
 From the newstuff / SolidInc pairs saved by both versions (`samples/*FL11Export`, `*FL12Export`); after the
 rules below both convert to FL 11's own saves except edited content and runtime pointers (212 bytes 20..35).
