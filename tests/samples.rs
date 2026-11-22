@@ -439,3 +439,29 @@ fn fl8_steps_and_tempo() {
     assert!(!ev.iter().any(|e| [28, 29, 31, 32, 97, 98, 202, 237, 238, 239].contains(&e.id)));
     assert_eq!(flparser::text(ev.iter().find(|e| e.id == 199).unwrap().data), "8.0.0");
 }
+
+/// FL 8.0 -> 7.0 / 6.0 / 5.0 / 4.5.2 on What I Found (FL 8's NewStuff.flp): version strings, Sytrus in each target's
+/// state version, and for FL 4.5 no automation clips left (channel type 5, event 234) but X-Y Controllers instead.
+#[test]
+fn fl8_to_older() {
+    let Ok(b) = std::fs::read("samples/SolidInc-What I found(FL8Export).flp") else { return };
+    let dir = std::env::temp_dir().join("flpkit-older-test samples");
+    for (to, sytrus) in [("7.0.0", 18u32), ("6.0.4", 15), ("5.0.0", 7), ("4.5.2", 6)] {
+        let (d, _) = flparser::fl6::from_8_0(&b, to, &dir).unwrap();
+        let (_, ev) = flparser::parse(&d).unwrap();
+        assert_eq!(flparser::text(ev.iter().find(|e| e.id == 199).unwrap().data), to);
+        let mut plugin = String::new();
+        for e in &ev {
+            if e.id == 201 {
+                plugin = flparser::text(e.data);
+            }
+            if e.id == 213 && plugin == "Sytrus" {
+                assert_eq!(u32::from_le_bytes(e.data[..4].try_into().unwrap()), sytrus, "Sytrus state for {to}");
+            }
+        }
+        if to == "4.5.2" {
+            assert!(!ev.iter().any(|e| e.id == 234 || (e.id == 21 && e.data[0] == 5)));
+            assert!(ev.iter().any(|e| e.id == 201 && flparser::text(e.data) == "Fruity X-Y Controller"));
+        }
+    }
+}

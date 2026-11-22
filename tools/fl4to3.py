@@ -11,7 +11,7 @@ BeepMap Ambi: 4.1.2 vs 3.5.4 saves; Hoovalicious, SubwooferTest, NewStuff).
 - plugin names as FL 3.5 spells them; samples: Data-relative paths found in FL 3.5 by name, else copied"""
 import sys, os, struct, shutil, glob
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from fl8to6 import read, write
+from flp import read, write
 
 from paths import PF
 FL3 = PF + 'FruityLoops3.5'

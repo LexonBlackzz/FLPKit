@@ -112,3 +112,198 @@ pub fn v23_to_v18(b: &[u8]) -> Option<Vec<u8>> {
     }
     Some(out)
 }
+
+fn u32le(a: &[u8], o: usize) -> u32 {
+    u32::from_le_bytes(a[o..o + 4].try_into().unwrap())
+}
+fn f32le(a: &[u8], o: usize) -> f32 {
+    f32::from_le_bytes(a[o..o + 4].try_into().unwrap())
+}
+fn f64le(a: &[u8], o: usize) -> f64 {
+    f64::from_le_bytes(a[o..o + 8].try_into().unwrap())
+}
+
+/// v18 curve `[u32 t <= 8][u32 2][u32 n][n x (f64 x, f64 y, f32 tension, u32 mode)]` at `k`: its point count
+fn curve2_at(a: &[u8], k: usize) -> Option<usize> {
+    if k + 12 > a.len() {
+        return None;
+    }
+    let (t, v, n) = (u32le(a, k), u32le(a, k + 4), u32le(a, k + 8) as usize);
+    if t > 8 || v != 2 || !(1..=4096).contains(&n) || k + 12 + 24 * n > a.len() {
+        return None;
+    }
+    for j in 0..n {
+        let o = k + 12 + 24 * j;
+        let (x, y, te, m) = (f64le(a, o), f64le(a, o + 8), f32le(a, o + 16), u32le(a, o + 20));
+        if !(x.is_finite() && y.is_finite() && te.abs() <= 1.0001 && m < 0x10000 && -1e6 < x && x < 1e6) {
+            return None;
+        }
+    }
+    Some(n)
+}
+
+/// curve objects v2 (f64 points) -> v1 (f32 points), as in automation clips (event 234)
+fn curves_v1(a: &[u8]) -> Vec<u8> {
+    let (mut out, mut o, mut k) = (Vec::new(), 0, 0);
+    while k + 12 < a.len() {
+        let n = if a[k + 4..k + 8] == [2, 0, 0, 0] { curve2_at(a, k) } else { None };
+        let Some(n) = n else {
+            k += 1;
+            continue;
+        };
+        let mut head = a[o..k].to_vec();
+        let h = head.len();
+        // type-1 curves sit in a wrapper [u32 2][u32 0][f32][f32]: its version 2 -> 1 too
+        if a[k] == 1 && h >= 16 && head[h - 16..h - 12] == [2, 0, 0, 0] && head[h - 12..h - 8] == [0; 4] {
+            head[h - 16] = 1;
+        }
+        out.extend(head);
+        out.extend(&a[k..k + 4]);
+        out.extend(1u32.to_le_bytes());
+        out.extend(&a[k + 8..k + 12]);
+        for j in 0..n {
+            let p = k + 12 + 24 * j;
+            out.extend((f64le(a, p) as f32).to_le_bytes());
+            out.extend((f64le(a, p + 8) as f32).to_le_bytes());
+            out.extend(&a[p + 16..p + 24]);
+        }
+        k += 12 + 24 * n;
+        o = k;
+    }
+    out.extend(&a[o..]);
+    out
+}
+
+/// per operator: two f32 tables of 256 (FL 8) -> 128 (FL 6) entries, 52 bytes after the operator start (after the
+/// preset's RTF text or an 8 x ff run); FL 8 pads the upper halves with zeros
+fn tables(a: &[u8]) -> Vec<u8> {
+    let z = |s: &[u8]| s.iter().all(|&b| b == 0);
+    let (mut out, mut o, mut h) = (Vec::new(), 0, 0);
+    while h + 2100 < a.len() {
+        let x = h + 52;
+        let start = (h >= 8 && a[h - 8..h] == [255; 8]) || (h >= 4 && a[h - 4..h] == [0x7d, 0x0d, 0x0a, 0]);
+        if start && z(&a[x + 512..x + 1024]) && z(&a[x + 1536..x + 2048]) {
+            out.extend(&a[o..x + 512]);
+            out.extend(&a[x + 1024..x + 1536]);
+            h = x + 2048;
+            o = h;
+            continue;
+        }
+        h += 1;
+    }
+    out.extend(&a[o..]);
+    out
+}
+
+/// Sytrus v18 (FL 8) -> v15 (FL 6), inflated payloads; byte-exact on 20 demo pairs. FL 8 inserts 3 bytes (01 00 01)
+/// at 974 of the global header
+pub fn v18_to_v15(a: &[u8]) -> Option<Vec<u8>> {
+    if a.get(974..977)? != [1, 0, 1] {
+        return None;
+    }
+    Some(tables(&curves_v1(&[&a[..974], &a[977..]].concat())))
+}
+
+/// (start, end) of each v1 curve `[u32 type][u32 1][u32 n][n x 16 bytes]`
+fn curves1(a: &[u8]) -> Vec<(usize, usize)> {
+    let (mut out, mut k) = (Vec::new(), 0);
+    while k + 12 < a.len() {
+        if a[k + 4..k + 8] == [1, 0, 0, 0] {
+            let (t, n) = (u32le(a, k), u32le(a, k + 8) as usize);
+            if (1..=8).contains(&t)
+                && (1..=4096).contains(&n)
+                && k + 12 + 16 * n <= a.len()
+                && (0..n).all(|j| f32le(a, k + 12 + 16 * j).abs() < 1e6 && f32le(a, k + 20 + 16 * j).abs() <= 1.0001)
+            {
+                out.push((k, k + 12 + 16 * n));
+                k += 12 + 16 * n;
+                continue;
+            }
+        }
+        k += 1;
+    }
+    out
+}
+
+/// operator block (fields from `h`): v15 adds a u32 at h+48 (operator noise; v7 keeps it near the end), 2 tables of
+/// 128 f32 (v7: 24), and reshapes the 12 bytes from end-28
+fn op15(g: &[u8], h: usize) -> Vec<u8> {
+    let e = g.len();
+    let p = &g[e - 28..e - 16];
+    [&g[..h + 48], &g[h + 52..h + 148], &g[h + 564..h + 660], &g[h + 1076..e - 28], &p[..4], &g[h + 48..h + 52], &[0; 4], &p[8..11], &g[e - 16..]]
+        .concat()
+}
+
+/// Sytrus v15 (FL 6) -> v7 (FL 5), inflated payloads. From the one patch both ship (Moholithic Filter) and the
+/// user's FL 5 save. ponytail: harmonic tables cut to FL 5's 24 entries; cut points in zero runs are guesses
+pub fn v15_to_v7(b: &[u8]) -> Option<Vec<u8>> {
+    if b.len() < 1137 || u32le(b, 1129) != 2 {
+        return None;
+    }
+    let mut out = Vec::new();
+    let mut o = 0;
+    for (s, e) in [(966, 972), (1043, 1081), (1095, 1099), (1112, 1116), (1129, 1133)] {
+        out.extend(&b[o..s]);
+        o = e;
+    }
+    let rtf_end = 1137 + u32le(b, 1133) as usize;
+    out.extend(b.get(o..rtf_end)?);
+    let cv = curves1(b);
+    out.extend(op15(b.get(rtf_end..cv.first()?.0)?, 0));
+    for (j, &(s, e)) in cv.iter().enumerate() {
+        out.extend(&b[s..e]);
+        let g = &b[e..cv.get(j + 1).map_or(b.len(), |x| x.0)];
+        match g.len() {
+            1140 if g[4..20] == [255; 16] => out.extend(op15(g, 20)),
+            108 => out.extend(&g[..101]),
+            37 => out.extend([&g[..20], &g[21..]].concat()),
+            _ => out.extend(g),
+        }
+    }
+    Some(out)
+}
+
+fn flag1(g: &mut [u8], k: usize) {
+    if let Some(b) = g.get_mut(k).filter(|b| **b == 1) {
+        *b = 0;
+    }
+}
+
+/// Sytrus v7 (FL 5) -> v6 (FL 4.5), inflated payloads. From "Synth string - fat texture" saved by FL 4.5.2 and 4.9.0.
+/// ponytail: the 1 -> 0 flag bytes are 1 in v7 and 0 in v6 on that pair; meaning not decoded
+pub fn v7_to_v6(b: &[u8]) -> Option<Vec<u8>> {
+    let cv = curves1(b);
+    let r = 1081 + u32le(b, 1077) as usize;
+    let mut head = b.get(..cv.first()?.0)?.to_vec();
+    flag1(&mut head, r + 271);
+    head.remove(967); // v7 adds a byte at 967
+    let mut out = head;
+    for (j, &(s, e)) in cv.iter().enumerate() {
+        let n = u32le(b, s + 8) as usize;
+        out.extend(&b[s..s + 4]);
+        out.extend([0; 4]); // curve version 1 -> 0, points 16 -> 12 bytes
+        out.extend(&b[s + 8..s + 12]);
+        for k in 0..n {
+            out.extend(&b[s + 12 + 16 * k..s + 24 + 16 * k]);
+        }
+        let mut g = b[e..cv.get(j + 1).map_or(b.len(), |x| x.0)].to_vec();
+        match g.len() {
+            307 => flag1(&mut g, 291),
+            36 => flag1(&mut g, 20),
+            76 => flag1(&mut g, 60),
+            _ => {}
+        }
+        out.extend(g);
+    }
+    Some(out)
+}
+
+/// `[u32 from][zlib]` state -> `[u32 to][zlib]` through `f`, or None when the version or layout doesn't match
+pub(crate) fn convert(d: &[u8], from: u32, to: u32, f: fn(&[u8]) -> Option<Vec<u8>>) -> Option<Vec<u8>> {
+    use miniz_oxide::{deflate::compress_to_vec_zlib, inflate::decompress_to_vec_zlib};
+    if d.len() < 4 || u32le(d, 0) != from {
+        return None;
+    }
+    let p = f(&decompress_to_vec_zlib(&d[4..]).ok()?)?;
+    Some([&to.to_le_bytes()[..], &compress_to_vec_zlib(&p, 6)].concat())
+}

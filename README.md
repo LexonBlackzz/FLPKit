@@ -9,7 +9,7 @@ FLPKit is not affiliated with Image-Line. FL Studio is their trademark.
 
 ## Build
 
-You need [Rust](https://rustup.rs). The older-version converters in `tools/` also need Python 3.
+You need [Rust](https://rustup.rs). The FL 3.5 converter in `tools/` also needs Python 3.
 
 ```sh
 cargo build --release
@@ -31,21 +31,19 @@ flpkit midi song.flp -o out.mid --cut
 Back up your project first. Each step rewrites the file for the older version and drops or substitutes what that version lacks. The tool prints a warning for each loss.
 
 ```sh
-flpkit downgrade song.flp --to 20.6       # also 20.9, 12.3, 11.1, 8.0
+flpkit downgrade song.flp --to 20.6       # also 20.9, 12.3, 11.1, 8.0, 7.0, 6.0, 5.0, 4.5
 ```
 
 `flpkit` refuses a project when the target can't load something in it, like a plugin newer than that version. `--force` converts it anyway.
 
-`flpkit` also takes FL 12.3 saves for the FL 11 and FL 8 targets. For FL 8 it copies samples that FL 8's Data folder lacks into a `<output> samples` folder, using [ffmpeg](https://ffmpeg.org) on your PATH for Ogg samples.
+`flpkit` also takes FL 12.3 saves for the FL 11 and FL 8 targets, and FL 8 saves for FL 7 and older. From FL 8 down it copies samples the older FL's Data folder lacks into a `<output> samples` folder, using [ffmpeg](https://ffmpeg.org) on your PATH for Ogg samples.
 
-Targets older than FL 8 still run as Python scripts in `tools/`, chained after `flpkit`. To take an FL 2026 project to FL 6:
+FruityLoops 3.5 still runs as a Python script, chained after `flpkit`:
 
 ```sh
-flpkit downgrade song.flp --to 8.0 --force -o song8.flp
-python tools/fl8to6.py song8.flp song6.flp
+flpkit downgrade song.flp --to 4.5 -o song4.flp
+python tools/fl4to3.py song4.flp song3.flp
 ```
-
-The Python steps are moving into `flpkit` itself, so one command will cover every target.
 
 | From | To | How | Tested on |
 |---|---|---|---|
@@ -53,10 +51,10 @@ The Python steps are moving into `flpkit` itself, so one command will cover ever
 | FL 2025 / 2026 | FL 12.3 | `flpkit downgrade --to 12.3` | Opened and played in FL 12.3 |
 | FL 2025 / 2026, FL 12.3 | FL 11.1 | `flpkit downgrade --to 11.1` | An Avicii remake, sounds right in FL 11 (64-bit) |
 | FL 2025 / 2026, FL 12.3 | FL 8.0 | `flpkit downgrade --to 8.0` | Scott Fisher's Moholithic Filter in FL 8 |
-| FL 8.0 | FL 7.0 | `tools/fl8to7.py` | SolidInc's What I Found; the slicer sounds a bit different |
-| FL 8.0 | FL 6.0 | `tools/fl8to6.py` | What I Found loads in FL 6 |
-| FL 8.0 | FL 5.0 | `tools/fl8to5.py` | What I Found plays in FL 2026; not yet heard in FL 5 itself |
-| FL 8.0 | FL 4.5.2 | `tools/fl8to4.py` | What I Found in FL 4.5 |
+| FL 2025 / 2026, FL 12.3, FL 8.0 | FL 7.0 | `flpkit downgrade --to 7.0` | SolidInc's What I Found; the slicer sounds a bit different |
+| FL 2025 / 2026, FL 12.3, FL 8.0 | FL 6.0 | `flpkit downgrade --to 6.0` | What I Found loads in FL 6 |
+| FL 2025 / 2026, FL 12.3, FL 8.0 | FL 5.0 | `flpkit downgrade --to 5.0` | What I Found plays in FL 2026; not yet heard in FL 5 itself |
+| FL 2025 / 2026, FL 12.3, FL 8.0 | FL 4.5.2 | `flpkit downgrade --to 4.5` | What I Found in FL 4.5 |
 | FL 4.x | FruityLoops 3.5.4 | `tools/fl4to3.py` | Moholithic Filter in FL 3.5, a little louder than FL 4 |
 
 ### What you lose

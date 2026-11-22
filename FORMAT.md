@@ -335,7 +335,7 @@ Mul without a stretch time: FL 2026 applies the Mul alone, but FL 12 doesn't unt
 time = sample length × Mul × BPM/60 × 96 (vocal 02: 2.0468 s × 2 at 128 BPM = 838, user-toggled FL 12.3 save). The downgrade
 computes it from the WAV header (`stretch_times`). Other formats are left alone, with a warning.
 
-## Downgrade FL 8.0 → FL 6.0 (prototype: `tools/fl8to6.py`)
+## Downgrade FL 8.0 → FL 6.0 (`src/fl6.rs`)
 Rules from 6 demo songs saved by both FL 8.0.0 and FL 6.0.x (Blake-Hanging On, Blake-Nowhere near, Fuego-ThreeHours,
 Pilchard-Tzachitx match FL 6's own save after conversion, except window-position junk in 212):
 - Every event ID FL 8 writes also appears in FL 6 saves (FL 5 lacks 26, 27, 95, 230, 235, 236).
@@ -363,7 +363,7 @@ Pilchard-Tzachitx match FL 6's own save after conversion, except window-position
   253 Hz and 0.2703 = 407 Hz read in FL, presets 0.7747 ≈ 5512, 0.918 ≈ 11025, 1 = 16000 Hz; log-interpolated), Q, gain (0.66 default).
   Love Philter cutoff log up to 20 kHz, 108/256 = 42 % ≈ 500 Hz (FL shows only %; matched by ear against FL 8);
   slot 0 only, envelopes dropped.
-- Sytrus (`tools/sy18to15.py`): FL 8 v18 = u32 0x12 + zlib, FL 6 v15 = 0x0f + zlib. On the inflated data: drop the 3
+- Sytrus (`src/sytrus.rs`): FL 8 v18 = u32 0x12 + zlib, FL 6 v15 = 0x0f + zlib. On the inflated data: drop the 3
   bytes `01 00 01` at 974; curve objects `[u32 type ≤ 8][u32 2][u32 n][n × (f64 x, f64 y, f32 tension, u32 mode)]`
   → version 1 with `f32 x, f32 y` (type-1 curves also sit in a wrapper `[u32 2][u32 0][f32][f32]`, version 2 → 1);
   per operator two f32 tables of 256 entries → 128 (FL 8 pads the upper halves with zeros), 52 bytes after the
@@ -383,7 +383,7 @@ Pilchard-Tzachitx match FL 6's own save after conversion, except window-position
 - Samples (196) not in FL 6's Data are copied from FL 8's Data next to the output (.ogg → .wav with ffmpeg; FL 6
   can't load ogg) and referenced by absolute path.
 
-## Downgrade FL 8.0 → FL 7.0 (prototype: `tools/fl8to7.py`)
+## Downgrade FL 8.0 → FL 7.0 (`src/fl6.rs`)
 From the 9 demos saved by both 7.0.0 and 8.0.0 (Cool stuff/*, NewStuff is a different song in FL 7). FL 7.0 already
 writes FL 8's Sytrus v18, window info (212), free pattern clips, automation v2 (234), note release byte, Love
 Philter v2 and Parametric EQ 2 (state version 1; FL 8 writes 2, same 305-byte layout). FL 8 only adds the 70th mixer
@@ -391,7 +391,7 @@ track and mixer param 133 (225), and 235 grows 69 → 70 bytes. Converting the 8
 sequence exactly (remaining diffs: 200, window pointers, re-zlibbed states). Maximus and Slicex (FL 8 only) get
 the FL 6 substitutes; samples FL 7's Data lacks are copied as for FL 6.
 
-## Downgrade FL 6.0 → FL 5.0 (prototype: `tools/fl6to5.py`, chained by `tools/fl8to5.py`)
+## Downgrade FL 6.0 → FL 5.0 (`src/fl5.rs`)
 From FL 5's seven 5.0.0 demo saves and the 5 songs FL 5 ships as 4.x saves and FL 6 as 6.0 saves (Cool stuff:
 DanR, JasonC-Abstraction, MrSpecial, Pilchard, ScottFisher). Converting the FL 6 saves reproduces FL 5's mixer
 event order, 147 and 225 byte for byte where the song wasn't edited between saves.
@@ -416,7 +416,7 @@ event order, 147 and 225 byte for byte where the song wasn't edited between save
   at 8, the 225 coding, so it is renumbered the same way (FL 5 demos link volume as `60 1f`).
 - Plugins missing in FL 5 (What I Found: Multiband Compressor → Fruity Compressor, FL 5's "FastMaster" preset for
   the Maximus stand-in, "Light" otherwise, 212 byte 8 = 0 as FL 5 hosts it as VST; Delay Bank → Delay 2): Multiband Compressor, Delay Bank, Reeverb 2, Squeeze (and FL 6's new generators).
-- Sytrus v15 → v7 (`tools/sy15to7.py`, byte-exact on the ScottFisher pair, 43146 bytes): FL 5 reads v15 as v7
+- Sytrus v15 → v7 (`src/sytrus.rs`, byte-exact on the ScottFisher pair, 43146 bytes): FL 5 reads v15 as v7
   garbage (What I Found then pinned CPU and the output meter with nothing playing). Inflated payload: header up
   to 966 equal; v15 adds 6 bytes at 966, 38 at 1043 and a u32 index (0, 1, 2) at 1095/1112/1129 (17-byte records),
   then the RTF text (u32 length at 1133, v7 1077). 6 operator blocks (op 0 right after the RTF, ops 1–5 after
@@ -427,8 +427,7 @@ event order, 147 and 225 byte for byte where the song wasn't edited between save
 ## Downgrade FL 5.0 → FL 4.5.2
 
 Learned from the demos FL 4 ships as 4.5.2 saves and FL 5 as 5.0.0 saves (Fuego-FL303, Fuego-Momentum; after
-these rules only song edits, window positions and FL 4's 153 sample-rate events differ). `tools/fl5to4.py`,
-chained from FL 8 by `tools/fl8to4.py`.
+these rules only song edits, window positions and FL 4's 153 sample-rate events differ). Code in `src/fl4.rs`.
 - 199 → `4.5.2`; drop 206/207 (song genre/author strings) and 234.
 - 226/227 records: u32 at 16 = 128 (FL 4 constant; FL 5 writes signed values such as −512).
 - 215: first 92 bytes (FL 5 appends 20).
@@ -436,7 +435,7 @@ chained from FL 8 by `tools/fl8to4.py`.
 - 140 (u32 0) between 70 and 22 on every channel.
 - Fruity slicer v13 → v6: `[u32 6][i32 bars][i32 bpm][i32 0][i32 0]`, then the same path and count; each slice is
   name, u32 pos, u8 0 (v13 adds i32 −1 and f32 −1); same 13-byte trailer with the last byte 0.
-- Sytrus v7 → v6 (both `[u32 version][zlib]`, `tools/sy7to6.py`, from "Synth string - fat texture" saved by
+- Sytrus v7 → v6 (both `[u32 version][zlib]`, `src/sytrus.rs`, from "Synth string - fat texture" saved by
   FL 4.5.2 and FL 4.9.0): drop byte 967; curves `[type][u32 1][n][n × 16]` → `[type][u32 0][n][n × 12]` (the
   4th u32 per point goes); flag byte 1 → 0 at op + 271, after the ff run of each 36-byte section, and at 60 of
   the 76-byte section. Result is byte-equal on that pair except 3 values edited between the saves.
@@ -444,11 +443,11 @@ chained from FL 8 by `tools/fl8to4.py`.
   Flangus; Compressor, Reeverb, Phaser and Free Filter are VSTs in FL 4 as in FL 5).
 - 226 `ff000000 ff000000 0400 ff0f 00000000 80000000`: every FL 4/5 save has it once, before the 227 list (or
   the first channel); FL 8 → 5 output lacks it, which FL 5 accepts but FL 4 rejects ("error while reading").
-- Channel type (21) 5 = automation clip, unknown to FL 4 (types 0–4; the file is rejected). fl5to4 makes them empty
+- Channel type (21) 5 = automation clip, unknown to FL 4 (types 0–4; the file is rejected). The FL 4 step makes them empty
   samplers and drops their playlist items (233 records with u16 0x5000 at 4, channel at 6).
 - Audio clips (type 4) exist in FL 4 and keep their playlist items; trims at 20/24: FL 5 f32 ms (−1 untrimmed) →
   FL 4 u32 start / end frames at 44.1 kHz (untrimmed `ffffffff` / `7fffffff`; NewStuff 0 / 881999 = 20 s at 90 BPM).
-- Clip automation (`tools/clips4.py`): each linked clip gets a Fruity X-Y Controller in a free mixer slot (state
+- Clip automation (`clips` in `src/fl4.rs`): each linked clip gets a Fruity X-Y Controller in a free mixer slot (state
   `[u32 1][X][X min 0][X max 65536][0][Y][Y min][Y max]…`, param 0 = X, link output 0 = X; 212 u32 0/4 = mixer
   track/slot); the clip's 227 links take the X-Y as source (`[0][0][0x2000 + track << 6 + slot]` at 0 and 4), so
   FL 4 maps X onto each target's range and keeps 230 formulas. Each placement becomes a pattern of 223 records

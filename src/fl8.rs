@@ -381,7 +381,7 @@ fn plugins(ev: Ev, warnings: &mut Vec<String>) -> Ev {
 }
 
 /// `src` as a PCM .wav FL 8 can load: .ogg and Vorbis-in-.wav (format 0x6771, data = Ogg stream) decoded by ffmpeg
-fn pcm_wav(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn pcm_wav(src: &Path, dst: &Path) -> Result<(), String> {
     if dst.exists() {
         return Ok(());
     }
