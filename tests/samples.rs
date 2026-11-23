@@ -397,7 +397,8 @@ fn channel_colors() {
 
 #[test]
 fn progress_reports_reach_the_end() {
-    let Ok(b) = std::fs::read("samples/SolidInc-What I found(FL2026Export).flp") else { return };
+    // a project with MIDI Out channels: FL 21+ exports nothing else
+    let Ok(b) = std::fs::read("samples/newstuffFromFL8MIDI(FL2026Export).flp") else { return };
     let mut last = (0, 0);
     let p = flparser::Project::parse_progress(&b, &mut |d, t| last = (d, t)).unwrap();
     assert_eq!(last, (b.len() as u64, b.len() as u64));

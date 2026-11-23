@@ -900,12 +900,17 @@ impl Project {
         Events { p: self, pats, ons, offs: BinaryHeap::new(), only, auto: auto.into_iter().peekable() }
     }
 
-    /// Rack channels FL exports, in rack order: those that play notes, and every MIDI Out.
+    /// Rack channels FL exports, in rack order: those that play notes (FL 21+: MIDI Out only), and every MIDI Out.
     pub fn used_channels(&self) -> Vec<u16> {
         let mut s = BTreeSet::new();
+        // FL 21+ exports MIDI Out channels only: other generators need "Prepare for MIDI export" first (Goofy FL 21:
+        // its Kick / Clap samplers play but aren't in FL's export). ponytail: FL 12.x / 20.x not checked, no sample
+        // project plays a sampler there
+        let major = self.version.split('.').next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0);
+        let exported = |ch: u16| major < 21 || self.channels.get(ch as usize).is_some_and(|c| c.plugin == "MIDI Out");
         for c in &self.clips {
             let notes = self.patterns.get(&c.pattern).map(|p| &p.notes[..]).unwrap_or_default();
-            s.extend(notes.iter().filter(|n| c.at(n.pos).is_some()).map(|n| n.chan));
+            s.extend(notes.iter().filter(|n| c.at(n.pos).is_some()).map(|n| n.chan).filter(|&ch| exported(ch)));
         }
         // FL exports every MIDI Out channel, notes or not (when_e, a collab FL 2025 project)
         s.extend((0..self.channels.len() as u16).filter(|&i| self.channels[i as usize].plugin == "MIDI Out"));
