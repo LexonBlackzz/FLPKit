@@ -324,6 +324,8 @@ pub struct Channel {
     pub echo: (f64, u32, u32), // echo delay (209): feed 0..1, echoes, time (0 = all on the note)
     pub lfo: Option<Lfo>,      // automation channel LFO (234 tail)
     pub lfo_on: bool,
+    /// rack switch (event 0); a disabled channel plays nothing (Goofy FL 21: its MIDI Out track has no notes)
+    pub disabled: bool,
 }
 
 impl Channel {
@@ -411,6 +413,8 @@ pub struct Project {
     pub clips: Vec<Clip>, // pattern clips only
     pub tempo_clips: Vec<AutoClip>, // values in BPM (as FL's beat counts them, see tempo_points)
     pub auto_clips: Vec<AutoClip>,
+    /// last end of a channel clip (audio or automation; tempo clips excluded), for the song end
+    pub chan_end: u64,
     pub tempo_legacy: bool, // tempo points stored as (BPM - 60) / 120 (Nuker 3): FL writes every tick
     pub warnings: Vec<String>,
     pub cut_remainder: bool, // FL's export option "Cut remainder": the tail ends 1 tick after the song
@@ -490,6 +494,7 @@ impl Project {
                     }
                     chan = Some(i);
                 }
+                0 if chan.is_some() => p.channels[chan.unwrap()].disabled = d.first() == Some(&0),
                 // Channel fields: first value after channel select wins, so later
                 // mixer-effect plugin events don't overwrite the generator.
                 128 | 201 | 192 | 203 | 209 | 213 | 215 | 219 if chan.is_some() => {
@@ -577,8 +582,9 @@ impl Project {
                         p.warnings.push("multiple arrangements; only the first is used".into());
                         continue;
                     }
-                    // ponytail: widths verified on 8.0, 11.1, 12.3, 20.x, 25.1, 26.1 only
-                    let w = match major { 0..=10 => 28, 11..=24 => 32, 25 => 80, _ => 88 };
+                    // FL 21 adds 28 bytes to FL 12's 32 (a running item id at 32, f32 1.0 at 52).
+                    // ponytail: widths verified on 8.0, 11.1, 12.3, 20.x, 21.2, 25.1, 26.1 only (22-24 guessed as 21)
+                    let w = match major { 0..=10 => 28, 11..=20 => 32, 21..=24 => 60, 25 => 80, _ => 88 };
                     if d.len() % w != 0 {
                         p.warnings.push(format!("playlist size {} not a multiple of {w}", d.len()));
                     }
@@ -670,6 +676,8 @@ impl Project {
             }
         }
         p.auto_clips.sort_by_key(|c| c.pos);
+        // audio clips end the song too ("nice 2 know ya" FL 21: an audio clip 30720 ticks past the last pattern clip)
+        p.chan_end = chan_clips.iter().filter(|c| !tempo_src.contains(&c.2)).map(|c| c.0 as u64 + c.1 as u64).max().unwrap_or(0);
         // A pattern plays once at a time. A clip starting while an earlier clip of the same
         // pattern still plays (any playlist track, same position included) cuts it off; clips
         // of different patterns overlap freely (Nuker 3 FL 12, ts6 FL 20.0, collab FL 2025).
@@ -695,6 +703,10 @@ impl Project {
         if p.patterns.values().flat_map(|pt| &pt.notes).any(|n| echo(n.chan).is_some_and(|e| e.2 > 0)) {
             // ponytail: delayed echoes not written; unit of the time field unknown
             p.warnings.push("echo delay with time > 0: echoes not exported".into());
+        }
+        let off: Vec<bool> = p.channels.iter().map(|c| c.disabled).collect();
+        for pt in p.patterns.values_mut() {
+            pt.notes.retain(|n| !off.get(n.chan as usize).copied().unwrap_or(false));
         }
         for pt in p.patterns.values_mut() {
             if pt.notes.iter().any(|n| echo(n.chan).is_some_and(|e| e.2 == 0)) {
@@ -906,7 +918,7 @@ impl Project {
         // automation clips count, tempo clips don't (Hypernova re-exported in FL 12.3 ends at 797040,
         // its tempo clip at 798720)
         let ends = self.clips.iter().map(|c| (c.pos, c.len)).chain(self.auto_clips.iter().map(|c| (c.pos, c.len)));
-        ends.map(|(p, l)| p as u64 + l as u64).max().unwrap_or(0)
+        ends.map(|(p, l)| p as u64 + l as u64).max().unwrap_or(0).max(self.chan_end)
     }
 
     /// FL renders 30 s past the song end, in 512-sample blocks at 44.1 kHz.
