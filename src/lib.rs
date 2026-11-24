@@ -796,6 +796,12 @@ impl Project {
     }
 
     fn clip_writes(&self, c: &AutoClip, steps: f64) -> Vec<(u64, f64)> {
+        self.clip_writes_every(c, steps, false)
+    }
+
+    /// `clip_writes`, or with `every` a write on every tick of the clip, repeats included (FL 21+ channel pitch:
+    /// Stairway FL 25 bends every tick of its slide)
+    fn clip_writes_every(&self, c: &AutoClip, steps: f64, every: bool) -> Vec<(u64, f64)> {
         let mut out = Vec::new();
         let mut last = None;
         let nest: Vec<&AutoClip> = self.auto_clips.iter().filter(|m| m.target == c.src).collect();
@@ -803,7 +809,7 @@ impl Project {
             // tempo clips hold BPM already (Min/Max applied at parse)
             let v = if c.target == 0x4000 && c.param == 5 { c.value_at(c.start + (k + 1) as f64 / self.ppq as f64) } else { self.auto_value_in(c, k, &nest) };
             let q = (v * steps).round();
-            if last != Some(q) {
+            if every || last != Some(q) {
                 out.push((c.pos as u64 + k, q / steps));
                 last = Some(q);
             }
@@ -836,9 +842,12 @@ impl Project {
                         },
                         _ => continue,
                     };
-                    // channel pitch steps are 1/16384 (Hypernova's riser: a write every ~1.88 ticks)
-                    let steps = if what == 1 { 16384.0 } else { 65536.0 };
-                    w.extend(self.clip_writes(c, steps).into_iter().map(|(t, v)| (t, what, v)));
+                    // channel pitch steps are 1/16384 (Hypernova's riser: a write every ~1.88 ticks). FL 21+ writes
+                    // every tick and rounds the value to 4 x range (cents) + 1 steps first: 801 for +-2 semitones
+                    // (Goofy FL 21: 479 of 480 bends; the miss is a rounding tie)
+                    let fl21 = what == 1 && self.major() >= 21;
+                    let steps = if fl21 { 4.0 * ch.pitch_range as f64 * 100.0 + 1.0 } else if what == 1 { 16384.0 } else { 65536.0 };
+                    w.extend(self.clip_writes_every(c, steps, fl21).into_iter().map(|(t, v)| (t, what, v)));
                 }
                 if w.is_empty() {
                     continue;
@@ -1153,6 +1162,10 @@ impl Project {
 
     /// FL before 20.6 writes the knobs' start values and the bend in every reset block
     /// (Ascension and Hypernova re-exported in FL 12.3, Gangnam in FL 20.0).
+    fn major(&self) -> u32 {
+        self.version.split('.').next().and_then(|v| v.parse().ok()).unwrap_or(0)
+    }
+
     fn pre20_6(&self) -> bool {
         self.fl20_0() || self.version.split('.').next().and_then(|s| s.parse::<u32>().ok()).is_some_and(|v| v < 20)
     }
